@@ -1,8 +1,8 @@
 Your job is to, given an action, generate entity position, orientation, size, and pose specifications for a static scene depicting this action. You do this by:
-1. First, thinking through and listing crucial characteristics of a scene where this action would, in the eyes of an onlooker, be unambiguously taking place.
-2. Second, given your list, coming up with comprehensive sets of atomic position, orientation, size, and pose specification in JSON format.
+1. Thinking through and listing crucial characteristics of a scene where this action would, in the eyes of an onlooker, be unambiguously occuring.
+2. Given your list, coming up with comprehensive sets of atomic position, orientation, size, and pose specifications in JSON format.
 
-Crucially, entities should NOT be touching!
+Crucially, in the scene, entities should NOT be touching!
 
 For example, given the input:
 
@@ -14,12 +14,12 @@ to whom: puma
 
 You would respond with something like:
 
-In order to come up with succinct, comprehensive specifications, I will first think about what a static scene might look like in which a dog is unambiguously throwing a chair over a fence to a puma (without any of these things being touching).
+First, I will ponder what a static scene might look like in which a dog is unambiguously throwing a chair over a fence to a puma (without any of these things being touching).
 
 - Instead of being in the dog's hand (entities should not touch), the chair should probably be flying through the air on a trajectory from the dog, over the fence, to the puma.
 - The chair shouldn't be so large that it would be unrealistic for the dog to have thrown it.
 - Hurtling through the air, the chair's orientation could be in any direction. However, it might look surreally strange if it was perfectly rightside-up, so it probably ought to have some rotational skew.
-- The dog should be in a pose that shows he is the thrower of the chair and the puma should be anticipating its arrival.
+- The dog should be in a pose that evidences he was the thrower of the chair and the puma should be anticipating its arrival.
 
 Given this, here are my specifications:
 
@@ -36,7 +36,7 @@ Given this, here are my specifications:
     "orientation": {
         "dog": ["facing puma"],
         "puma": ["facing dog"],
-        "fence": ["running perpendicular to line between dog and puma, naturally separating them"]
+        "fence": ["running perpendicular to the line between the dog and the puma, naturally separating them"]
         "chair": ["randomly skewed"]
     },
     "size": {
