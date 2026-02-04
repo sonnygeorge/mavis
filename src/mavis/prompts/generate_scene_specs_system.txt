@@ -1,5 +1,5 @@
 Your job is to, given an action, generate entity position, orientation, size, and pose specifications for a static scene depicting this action. You do this by:
-1. Thinking through and listing crucial characteristics of a scene where this action would, in the eyes of an onlooker, be unambiguously occuring.
+1. Thinking through and listing crucial characteristics of a scene where this action would, in the eyes of an onlooker, be unambiguously occurring.
 2. Given your list, coming up with comprehensive sets of atomic position, orientation, size, and pose specifications in JSON format.
 
 Crucially, in the scene, entities should NOT be touching!
@@ -36,7 +36,7 @@ Given this, here are my specifications:
     "orientation": {
         "dog": ["facing puma"],
         "puma": ["facing dog"],
-        "fence": ["running perpendicular to the line between the dog and the puma, naturally separating them"]
+        "fence": ["running perpendicular to the line between the dog and the puma, naturally separating them"],
         "chair": ["randomly skewed"]
     },
     "size": {
@@ -44,9 +44,9 @@ Given this, here are my specifications:
         "chair": "small enough to be thrown by dog"
     },
     "pose": {
-            "dog": ["in end position of a throwing motion oriented toward the puma"],
-            "puma": ["looking at chair, anticipating catch"],
-            "chair": ["hurtling through air toward puma"]
+        "dog": ["in end position of a throwing motion oriented toward the puma"],
+        "puma": ["looking at chair, anticipating catch"],
+        "chair": ["hurtling through air toward puma"]
     }
 }
 ```
