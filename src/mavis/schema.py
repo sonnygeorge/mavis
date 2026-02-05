@@ -1,59 +1,23 @@
 import json
-from functools import cache
 from typing import Optional
 
 from pydantic import BaseModel, field_validator
-import bpy
-
-from mavis.constants import OBJAVERSE_SHAPES_DIR_PATH
+from mavis.globals import BlenderObject, BLENDER_OBJECTS
 
 
-class BlenderObjectDimensions(BaseModel):
-    """Dimensions of a 3D object in Blender units."""
-
-    x: float  # width
-    y: float  # height
-    z: float  # depth
-
-
-@cache
-def _get_blender_object_dimensions(
-    object_name: str, model: str
-) -> BlenderObjectDimensions:
-    """Load .blend and return dimensions (cached per object/model)."""
-    bpy.ops.wm.open_mainfile(filepath=str(OBJAVERSE_SHAPES_DIR_PATH / model))
-    dims = bpy.data.objects[object_name].dimensions
-    return BlenderObjectDimensions(x=dims.x, y=dims.y, z=dims.z)
-
-
-class BlenderObject(BaseModel):
-    """Reference to a 3D object: semantic name and .blend model file."""
-
-    object: str  # e.g. "dog"
-    model: str  # e.g. "dog.blend"
-
-    @field_validator("model")
-    @classmethod
-    def validate_model(cls, v: str) -> str:
-        """Validate .blend filename exists."""
-        if not v.endswith(".blend"):
-            raise ValueError("Value must be a .blend filename.")
-        blend_path = OBJAVERSE_SHAPES_DIR_PATH / v
-        if not blend_path.exists():
-            raise ValueError(f"Missing blend file: {blend_path}")
-        return v
-
-    def get_dimensions(self) -> BlenderObjectDimensions:
-        """Get the dimensions of the object (cached per object/model for this process)."""
-        return _get_blender_object_dimensions(self.object, self.model)
-
-    def as_readable_string(self) -> str:
-        """Return a human-readable representation of the object."""
-        dims = self.get_dimensions()
-        w_str = f"width(x)={dims.x}"
-        h_str = f"height(y)={dims.y}"
-        d_str = f"depth(z)={dims.z}"
-        return f"{self.object}: {w_str}, {h_str}, {d_str}"
+def _resolve_blender_object(
+    v: str | BlenderObject | None,
+) -> BlenderObject | None:
+    """Convert string to BlenderObject via registry, or pass through if already one."""
+    if v is None:
+        return None
+    if isinstance(v, str):
+        if v not in BLENDER_OBJECTS:
+            raise ValueError(
+                f"Unknown object '{v}'. Available: {list(BLENDER_OBJECTS.keys())}"
+            )
+        return BLENDER_OBJECTS[v]
+    return v
 
 
 class RelativeWhere(BaseModel):
@@ -61,6 +25,13 @@ class RelativeWhere(BaseModel):
 
     preposition: str
     what: BlenderObject
+
+    @field_validator("what", mode="before")
+    @classmethod
+    def resolve_what(cls, v: str | BlenderObject) -> BlenderObject:
+        result = _resolve_blender_object(v)
+        assert result is not None  # what is required
+        return result
 
 
 class ActionScene(BaseModel):
@@ -88,6 +59,16 @@ class ActionScene(BaseModel):
     where: Optional[RelativeWhere] = None
     to_whom: Optional[BlenderObject] = None
 
+    @field_validator("who", mode="before")
+    @classmethod
+    def resolve_who(cls, v: str | BlenderObject) -> BlenderObject:
+        return _resolve_blender_object(v)  # type: ignore[return-value]
+
+    @field_validator("what", "to_whom", mode="before")
+    @classmethod
+    def resolve_what_to_whom(cls, v: str | BlenderObject | None) -> BlenderObject | None:
+        return _resolve_blender_object(v)
+
     def as_readable_string(self) -> str:
         """
         Return a human-readable representation of the action scene.
@@ -102,15 +83,15 @@ class ActionScene(BaseModel):
         ```
         """
         lines = [
-            f"who: {self.who.object}",
+            f"who: {self.who.name}",
             f"does: {self.does}",
         ]
         if self.what is not None:
-            lines.append(f"what: {self.what.object}")
+            lines.append(f"what: {self.what.name}")
         if self.where is not None:
-            lines.append(f"where: {self.where.preposition} {self.where.what.object}")
+            lines.append(f"where: {self.where.preposition} {self.where.what.name}")
         if self.to_whom is not None:
-            lines.append(f"to whom: {self.to_whom.object}")
+            lines.append(f"to whom: {self.to_whom.name}")
         return "\n".join(lines)
 
 

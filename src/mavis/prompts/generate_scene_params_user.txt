@@ -1,14 +1,14 @@
-ACTION:
-
-{{ action }}
-
 BLENDER OBJECTS:
 
 {% for blender_object in blender_objects %}
 - {{ blender_object }}
 {% endfor %}
 
-SPECS:
+ACTION:
+
+{{ action }}
+
+REQUIREMENTS:
 
 {{ scene_characteristics }}
 

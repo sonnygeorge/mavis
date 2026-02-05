@@ -1,7 +1,6 @@
 import pytest
 
 from mavis.schema import (
-    BlenderObject,
     RelativeWhere,
     ActionScene,
     PromptPair,
@@ -15,14 +14,11 @@ from mavis.prompts import (
 
 @pytest.fixture
 def action_scene():
-    who = BlenderObject(object="dog", model="dog.blend")
+    who = "dog"
     does = "throws"
-    what = BlenderObject(object="chair", model="chair.blend")
-    where = RelativeWhere(
-        preposition="over",
-        what=BlenderObject(object="bookshelf", model="bookshelf.blend"),
-    )
-    to_whom = BlenderObject(object="puma", model="puma.blend")
+    what = "chair"
+    where = RelativeWhere(preposition="over", what="bookshelf")
+    to_whom = "puma"
     yield ActionScene(who=who, does=does, what=what, where=where, to_whom=to_whom)
 
 
