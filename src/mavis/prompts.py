@@ -29,13 +29,17 @@ def render_generate_scene_specs_prompt(action_scene: ActionScene) -> PromptPair:
 
 def render_generate_scene_setup_code_prompt(
     action_scene: ActionScene,
-    blender_objects: list[BlenderObject],
     scene_characteristics: str,
     scene_specs: ActionSceneSpecs,
 ) -> PromptPair:
     system_prompt = TEMPLATES["generate_scene_setup_code_system"].render()
     readable_action = action_scene.as_readable_string()
-    readable_blender_objects = [obj.as_readable_string() for obj in blender_objects]
+    readable_blender_objects = [
+        action_scene.who.as_readable_string(),
+        action_scene.what.as_readable_string(),
+        action_scene.where.what.as_readable_string(),
+        action_scene.to_whom.as_readable_string(),
+    ]
     readable_scene_specs = scene_specs.as_readable_string()
     user_prompt = TEMPLATES["generate_scene_setup_code_user"].render(
         action=readable_action,

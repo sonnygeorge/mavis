@@ -22,7 +22,7 @@ First, I will ponder what a static scene might look like in which a dog is unamb
 - Hurtling through the air, the chair's orientation could be in any direction. However, it might look surreally strange if it was perfectly rightside-up, so it probably ought to have some rotational skew.
 - The dog should be in a pose that evidences he was the thrower of the chair and the puma should be anticipating its arrival.
 
-Given this, here are my specifications:
+Given this, here are the specifications:
 
 ```json
 {
