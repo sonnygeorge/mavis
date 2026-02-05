@@ -1,5 +1,7 @@
 from PIL import Image
 
+# Pseudo-code:
+
 
 def run(action_scene: ActionScene, n_camera_positions: int = 1) -> list[Image.Image]:
     # 1. Assess generation feasibility
