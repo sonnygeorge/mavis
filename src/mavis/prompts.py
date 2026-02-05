@@ -32,9 +32,9 @@ def render_generate_scene_setup_code_prompt(
     readable_action = action_scene.as_readable_string()
     readable_blender_objects = [
         action_scene.who.name,
-        action_scene.what.name,
-        action_scene.where.what.name,
-        action_scene.to_whom.name,
+        action_scene.what.name if action_scene.what is not None else None,
+        action_scene.where.what.name if action_scene.where is not None else None,
+        action_scene.to_whom.name if action_scene.to_whom is not None else None,
     ]
     readable_blender_objects = [x for x in readable_blender_objects if x is not None]
     readable_scene_specs = scene_specs.as_readable_string()

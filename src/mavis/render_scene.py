@@ -16,7 +16,12 @@ _src = _Path(__file__).resolve().parent.parent
 if str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
 
-from mavis.globals import BLENDER_OBJECTS, ObjectPlacementSpec, BASE_SCENE_PATH
+from mavis.globals import (
+    BLENDER_OBJECTS,
+    ObjectPlacementSpec,
+    BASE_SCENE_PATH,
+    TEMP_JSON_PATH,
+)
 
 
 # def extract_masks_3drf(output_path: str, output_file: str) -> None:
@@ -336,79 +341,32 @@ def render_scene(
     bpy.ops.object.select_all(action="DESELECT")
 
     # Save in parent of dir this file is in
-    out_path = _Path(__file__).resolve().parent.parent / "test_output.blend"
+    out_path = _Path(__file__).resolve().parent.parent.parent / "test_output.blend"
     bpy.ops.wm.save_as_mainfile(filepath=str(out_path))
     print(f"Saved scene to {out_path}")
 
 
-DOG_THROWS_CHAIR_SPECS: List[ObjectPlacementSpec] = [
-    ObjectPlacementSpec(
-        object_name="bookshelf",
-        target_location=(0.0, 0.0, 0.0),
-        target_facing_direction=(0.0, 0.0, 0.0),  # Front facing viewer (along +Y axis)
-        touching_ground=True,
-    ),
-    ObjectPlacementSpec(
-        object_name="dog",
-        target_location=(-3.5, 0.5, 0.0),  # Left side, slightly forward
+def _placement_spec_from_dict(d: Dict[str, Any]) -> ObjectPlacementSpec:
+    """Build ObjectPlacementSpec from a JSON-loaded dict (lists become tuples)."""
+    loc = d["target_location"]
+    facing = d.get("target_facing_direction")
+    return ObjectPlacementSpec(
+        object_name=d["object_name"],
+        target_location=(loc[0], loc[1], loc[2]) if isinstance(loc, list) else loc,
         target_facing_direction=(
-            0.0,
-            0.0,
-            0.35,
-        ),  # Facing right-forward toward puma (~20°)
-        touching_ground=True,
-    ),
-    ObjectPlacementSpec(
-        object_name="puma",
-        target_location=(3.5, -0.3, 0.0),  # Right side, slightly back
-        target_facing_direction=(
-            0.0,
-            0.0,
-            3.49,
-        ),  # Facing left toward dog (~200°, mirroring dog's angle)
-        touching_ground=True,
-    ),
-    ObjectPlacementSpec(
-        object_name="chair",
-        target_location=(1.2, 0.0, 2.5),  # Airborne above bookshelf, closer to puma
-        target_facing_direction=(0.0, 0.0, 2.1),  # Rotated ~120° to show tumbling motion
-        touching_ground=False,
-    ),
-]
-
-
-# def _run_placement_test() -> None:
-#     """Load base scene, add objects from DOG_THROWS_CHAIR_SPECS, optionally save."""
-#     from mavis.constants import OBJAVERSE_DIR_PATH
-
-#     base_scene = OBJAVERSE_DIR_PATH / "base_scene.blend"
-#     if base_scene.exists():
-#         # 1. Load base scene – establishes proper scene/window context
-#         bpy.ops.wm.open_mainfile(filepath=str(base_scene))
-
-#     # 2. Add and delete a helper plane – same as render_scene_3drf; ensures
-#     #    context is valid for wm.append (VIEW_3D/object-mode operators work)
-#     bpy.ops.mesh.primitive_plane_add(size=5)
-#     bpy.ops.object.delete()
-
-#     with open(OBJAVERSE_DIR_PATH / "properties.json") as f:
-#         properties = json.load(f)
-
-#     config = {"shape_dir": str(OBJAVERSE_DIR_PATH / "shapes")}
-#     place_objects(DOG_THROWS_CHAIR_SPECS, config, properties)
-
-#     # Frame the view so all objects are visible (skipped in --background mode)
-#     bpy.ops.object.select_all(action="SELECT")
-#     try:
-#         bpy.ops.view3d.view_selected()
-#     except RuntimeError:
-#         pass
-#     bpy.ops.object.select_all(action="DESELECT")
-
-#     out_path = OBJAVERSE_DIR_PATH / "test_placement_output.blend"
-#     bpy.ops.wm.save_as_mainfile(filepath=str(out_path))
-#     print(f"Saved scene to {out_path}")
+            ((facing[0], facing[1], facing[2]) if isinstance(facing, list) else facing)
+            if facing is not None
+            else None
+        ),
+        touching_ground=d["touching_ground"],
+    )
 
 
 if __name__ == "__main__":
-    render_scene(DOG_THROWS_CHAIR_SPECS)
+    with open(TEMP_JSON_PATH, "r") as f:
+        obj_placement_specs = json.load(f)
+    os.remove(TEMP_JSON_PATH)
+    object_placement_specs = [
+        _placement_spec_from_dict(spec) for spec in obj_placement_specs
+    ]
+    render_scene(object_placement_specs)
