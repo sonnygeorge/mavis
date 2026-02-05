@@ -1,10 +1,11 @@
+import json
 from functools import cache
 from typing import Optional
-from pydantic import BaseModel, field_validator
 
+from pydantic import BaseModel, field_validator
 import bpy
 
-from .constants import OBJAVERSE_SHAPES_DIR_PATH
+from mavis.constants import OBJAVERSE_SHAPES_DIR_PATH
 
 
 class BlenderObjectDimensions(BaseModel):
@@ -22,8 +23,7 @@ def _get_blender_object_dimensions(
     """Load .blend and return dimensions (cached per object/model)."""
     bpy.ops.wm.open_mainfile(filepath=str(OBJAVERSE_SHAPES_DIR_PATH / model))
     dims = bpy.data.objects[object_name].dimensions
-    result = BlenderObjectDimensions(x=dims.x, y=dims.y, z=dims.z)
-    return result
+    return BlenderObjectDimensions(x=dims.x, y=dims.y, z=dims.z)
 
 
 class BlenderObject(BaseModel):
@@ -119,6 +119,9 @@ class ActionSceneSpecs(BaseModel):
     orientation: dict[str, list[str]]
     size: dict[str, list[str]]
     pose: dict[str, list[str]]
+
+    def as_readable_string(self) -> str:
+        return json.dumps(self.model_dump(), indent=2)
 
 
 class PromptPair(BaseModel):

@@ -1,7 +1,7 @@
 from jinja2 import Environment, FileSystemLoader, Template
 
-from constants import PROMPTS_DIR_PATH
-from schema import ActionScene, PromptPair, BlenderObject, ActionSceneSpecs
+from mavis.constants import PROMPTS_DIR_PATH
+from mavis.schema import ActionScene, PromptPair, BlenderObject, ActionSceneSpecs
 
 env = Environment(loader=FileSystemLoader(PROMPTS_DIR_PATH))
 
