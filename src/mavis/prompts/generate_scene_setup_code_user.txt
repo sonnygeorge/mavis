@@ -1,0 +1,17 @@
+ACTION:
+
+{{ action }}
+
+BLENDER OBJECTS:
+
+{% for blender_object in blender_objects %}
+- {{ blender_object }}
+{% endfor %}
+
+SPECS:
+
+{{ scene_characteristics }}
+
+```json
+{{ scene_specs }}
+```

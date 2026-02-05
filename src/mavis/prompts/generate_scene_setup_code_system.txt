@@ -1,0 +1,1 @@
+Your job is to, given .blend models of varying dimensions, write a python script to set up a Blender scene that adheres to specs of relative entity position, orientation, and size to depict an action (ignoring pose-level specs and leaving that for a future step).
