@@ -94,6 +94,19 @@ class ActionScene(BaseModel):
             lines.append(f"to whom: {self.to_whom.name}")
         return "\n".join(lines)
 
+    @property
+    def shorthand_str(self) -> str:
+        """Upper-camel shorthand string, e.g. 'ViJuOvBoLa'."""
+        parts = [
+            self.who.name[:2],
+            self.does[:2],
+            self.what.name[:2] if self.what else "",
+            self.where.preposition[:2] if self.where else "",
+            self.where.what.name[:2] if self.where else "",
+            self.to_whom.name[:2] if self.to_whom else "",
+        ]
+        return "".join(p.capitalize() for p in parts)
+
 
 class ActionSceneSpecs(BaseModel):
     position: dict[str, list[str]]

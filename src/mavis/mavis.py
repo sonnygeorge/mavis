@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from datetime import datetime
 
 from PIL import Image
 from tenacity import retry, stop_after_attempt
@@ -17,7 +18,7 @@ from mavis.responses import (
     parse_generate_scene_specs_response,
     parse_generate_scene_params_response,
 )
-from mavis.globals import BASE_SCENE_PATH, TEMP_JSON_PATH
+from mavis.globals import BASE_SCENE_PATH, TEMP_JSON_PATH, CUR_RUN_UID_ENV_VAR
 
 
 # TODO: (a "someday" improvement)
@@ -87,6 +88,11 @@ def run(
     if not generation_is_feasible:
         raise ValueError(f"Generation is not feasible: {reason}")
 
+    # Create short UID for the run and set the env variable
+    run_uid = f"{datetime.now().strftime('%y%m%d%H%M%S')}_{action_scene.shorthand_str}"
+    os.environ[CUR_RUN_UID_ENV_VAR] = run_uid
+    print(f"Beginning pipeline run with UID: {run_uid}")
+
     # 2. Generate scene specs
     scene_characteristics, action_scene_specs = generate_scene_specs(llm, action_scene)
 
@@ -95,7 +101,7 @@ def run(
         llm, action_scene, scene_characteristics, action_scene_specs
     )
 
-    # TODO: Remove this convenient hardcoded artifact used for quicker testing
+    # # TODO: Remove this convenient hardcoded artifact used for quicker testing
     # obj_placement_specs = [
     #     {
     #         "object_name": "person",

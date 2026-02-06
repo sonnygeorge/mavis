@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Optional
 
-N_POVS = 1
+N_POVS = 4
 
 IMG_RESOLUTION_X = 512
 IMG_RESOLUTION_Y = 512
@@ -20,6 +20,7 @@ OUTPUT_DIR_PATH = Path(__file__).resolve().parent.parent.parent / "outputs"
 OUTPUT_RENDERS_DIR_PATH = OUTPUT_DIR_PATH / "renders"
 OUTPUT_MASKS_DIR_PATH = OUTPUT_DIR_PATH / "masks"
 
+CUR_RUN_UID_ENV_VAR = "CUR_MAVIS_RUN_UID"
 
 @dataclass
 class BlenderObject:

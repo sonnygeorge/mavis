@@ -24,6 +24,7 @@ from mavis.globals import (
     IMG_RESOLUTION_Y,
     OUTPUT_RENDERS_DIR_PATH,
     OUTPUT_MASKS_DIR_PATH,
+    CUR_RUN_UID_ENV_VAR,
 )
 
 MAX_CAMERA_ANGLE_SAMPLES = 50
@@ -230,6 +231,7 @@ def save_masks(
     masks: list[np.ndarray],
     placed_objects: list[bpy.types.Object],
     pov_index: int,
+    run_uid: str,
 ) -> None:
     """Save individual per-object masks and a combined mask to OUTPUT_MASKS_DIR_PATH.
 
@@ -254,17 +256,20 @@ def save_masks(
         bpy.data.images.remove(img)
 
     # Save individual object masks
+    output_masks_dir = OUTPUT_MASKS_DIR_PATH / run_uid / f"{pov_index:04d}"
+    output_masks_dir.mkdir(parents=True, exist_ok=True)
+
     for mask, obj in zip(masks, placed_objects):
-        path = str(OUTPUT_MASKS_DIR_PATH / f"{pov_index:04d}_{obj.name}.png")
+        path = str(output_masks_dir / f"{obj.name}.png")
         _write_mask(mask, path)
 
     # Save combined (union) mask
     combined = np.clip(np.sum(masks, axis=0), 0.0, 1.0)
-    path = str(OUTPUT_MASKS_DIR_PATH / f"{pov_index:04d}_all_objects.png")
+    path = str(output_masks_dir / "all.png")
     _write_mask(combined, path)
 
 
-def render_scene(object_placement_specs: list[ObjectPlacementSpec]) -> None:
+def render_scene(object_placement_specs: list[ObjectPlacementSpec], run_uid: str) -> None:
     bpy.ops.wm.open_mainfile(filepath=str(BASE_SCENE_PATH))
     # Place objects in the scene according to the placement specifications
     placed_objects = place_objects(object_placement_specs)
@@ -328,10 +333,12 @@ def render_scene(object_placement_specs: list[ObjectPlacementSpec]) -> None:
             )
 
         # Save per-object and combined masks
-        save_masks(masks, placed_objects, i)
+        save_masks(masks, placed_objects, i, run_uid)
 
         # Render the scene: output path per POV, bounded retry
-        output_image = OUTPUT_RENDERS_DIR_PATH / f"render_{i:04d}.png"
+        output_render_dir = OUTPUT_RENDERS_DIR_PATH / run_uid
+        output_render_dir.mkdir(parents=True, exist_ok=True)
+        output_image = output_render_dir / f"{i:04d}.png"
         render_args.filepath = str(output_image)
         for attempt in range(MAX_RENDER_ATTEMPTS):
             try:
@@ -348,4 +355,5 @@ if __name__ == "__main__":
         obj_placement_specs = json.load(f)
     os.remove(TEMP_JSON_PATH)
     object_placement_specs = [ObjectPlacementSpec(**spec) for spec in obj_placement_specs]
-    render_scene(object_placement_specs)
+    run_uid = os.environ[CUR_RUN_UID_ENV_VAR]
+    render_scene(object_placement_specs, run_uid)

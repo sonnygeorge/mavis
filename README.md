@@ -8,4 +8,6 @@ Multi-view Action-to-Visual Image Synthesis
 
 ### TODO
 
-- Come up with directory + fname convention for outputs
+- Rest of pipeline
+- "walk" the percentiles of the POV sampling distribution if diverse POVS is important
+- Soft "blacklist" regions in POV sampling distribution when object overlap is computed if efficiency is important 
