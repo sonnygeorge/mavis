@@ -44,6 +44,4 @@ def render_generate_scene_setup_code_prompt(
         scene_characteristics=scene_characteristics,
         scene_specs=readable_scene_specs,
     )
-    print("\nPROMPT:\n", system_prompt)
-    print(user_prompt)
     return PromptPair(system=system_prompt, user=user_prompt)

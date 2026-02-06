@@ -1,5 +1,3 @@
-"""Provider-agnostic LLM inference abstraction."""
-
 import os
 from typing import Protocol, runtime_checkable
 

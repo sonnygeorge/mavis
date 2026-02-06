@@ -11,11 +11,11 @@ load_dotenv()
 def main():
     llm = OpenAILLM(model="gpt-5.2-2025-12-11")
     action_scene = ActionScene(
-        who="person",
-        does="flies",
+        who="violin",
+        does="jumps",
         what=None,
-        where=RelativeWhere(preposition="over", what="laptop"),
-        to_whom="tree",
+        where=RelativeWhere(preposition="over", what="box"),
+        to_whom="lamp",
     )
     output_images = run(llm, action_scene)
 

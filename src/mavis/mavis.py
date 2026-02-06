@@ -56,7 +56,7 @@ def generate_scene_params(
     return parse_generate_scene_params_response(response)
 
 
-def invoke_blender_render() -> None:
+def invoke_and_await_scene_render_subprocess() -> None:
     """Run Blender in background to render the scene from TEMP_JSON_PATH.
 
     Requires Blender in PATH, or set BLENDER_EXE in the environment (e.g. on macOS:
@@ -90,21 +90,43 @@ def run(
     # 2. Generate scene specs
     scene_characteristics, action_scene_specs = generate_scene_specs(llm, action_scene)
 
-    print("\nSCENE CHARACTERISTICS:\n", scene_characteristics)
-    print("\nACTION SCENE SPECS:\n", action_scene_specs)
-
     # 3. Generate scene params
     obj_placement_specs = generate_scene_params(
         llm, action_scene, scene_characteristics, action_scene_specs
     )
 
-    print("\nOBJ PLACEMENT SPECS:\n", obj_placement_specs)
-
-    with open(TEMP_JSON_PATH, "w") as f:
-        json.dump(obj_placement_specs, f)
+    # TODO: Remove this convenient hardcoded artifact used for quicker testing
+    # obj_placement_specs = [
+    #     {
+    #         "object_name": "person",
+    #         "target_location": [-3.0, 0.0, 0.0],
+    #         "target_facing_direction": [0.0, 0.0, 0.0],
+    #         "touching_ground": True,
+    #     },
+    #     {
+    #         "object_name": "laptop",
+    #         "target_location": [1.0, 0.0, 1.45],
+    #         "target_facing_direction": [0.55, -0.2, 0.7],
+    #         "touching_ground": False,
+    #     },
+    #     {
+    #         "object_name": "couch",
+    #         "target_location": [0.0, 0.0, 0.0],
+    #         "target_facing_direction": [0.0, 0.0, 1.57079632679],
+    #         "touching_ground": True,
+    #     },
+    #     {
+    #         "object_name": "tree",
+    #         "target_location": [4.2, 0.0, 0.0],
+    #         "target_facing_direction": [0.0, 0.0, 0.0],
+    #         "touching_ground": True,
+    #     },
+    # ]
 
     # 4. Invoke Blender to render the scene (reads TEMP_JSON_PATH, saves output)
-    invoke_blender_render()
+    with open(TEMP_JSON_PATH, "w") as f:
+        json.dump(obj_placement_specs, f)
+    invoke_and_await_scene_render_subprocess()
 
     # TODO: The rest of the pipeline
 

@@ -3,6 +3,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Optional
 
+N_POVS = 1
+
+IMG_RESOLUTION_X = 512
+IMG_RESOLUTION_Y = 512
 
 OBJAVERSE_DIR_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "objaverse"
 OBJAVERSE_SHAPES_DIR_PATH = OBJAVERSE_DIR_PATH / "shapes"
@@ -11,6 +15,10 @@ BASE_SCENE_PATH = OBJAVERSE_DIR_PATH / "base_scene.blend"
 PROMPTS_DIR_PATH = Path(__file__).resolve().parent / "prompts"
 
 TEMP_JSON_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "temp.json"
+
+OUTPUT_DIR_PATH = Path(__file__).resolve().parent.parent.parent / "outputs"
+OUTPUT_RENDERS_DIR_PATH = OUTPUT_DIR_PATH / "renders"
+OUTPUT_MASKS_DIR_PATH = OUTPUT_DIR_PATH / "masks"
 
 
 @dataclass
@@ -46,6 +54,6 @@ class ObjectPlacementSpec:
     """
 
     object_name: str
-    target_location: tuple[float, float, float]
-    target_facing_direction: tuple[float, float, float] | None
+    target_location: list[float]
+    target_facing_direction: list[float] | None
     touching_ground: bool

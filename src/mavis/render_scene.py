@@ -1,15 +1,13 @@
-import argparse
 import json
 import math
 import os
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path as _Path
-from typing import Any, Dict, List
 
 import numpy as np
 import bpy
-import bpy_extras
 from mathutils import Vector
 
 _src = _Path(__file__).resolve().parent.parent
@@ -17,268 +15,73 @@ if str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
 
 from mavis.globals import (
+    N_POVS,
     BLENDER_OBJECTS,
     ObjectPlacementSpec,
     BASE_SCENE_PATH,
     TEMP_JSON_PATH,
+    IMG_RESOLUTION_X,
+    IMG_RESOLUTION_Y,
+    OUTPUT_RENDERS_DIR_PATH,
+    OUTPUT_MASKS_DIR_PATH,
 )
 
-
-# def extract_masks_3drf(output_path: str, output_file: str) -> None:
-#     """Render a masked image from the current scene and save it to disk.
-
-#     Args:
-#         output_path: Path to save the masked image.
-#         output_file: Output file name for the masked image.
-#     """
-#     # Set up compositing nodes
-#     bpy.context.scene.use_nodes = True
-#     bpy.context.scene.render.film_transparent = True
-#     tree = bpy.context.scene.node_tree
-#     # Clear existing nodes
-#     for node in tree.nodes:
-#         tree.nodes.remove(node)
-#     # Add required nodes
-#     render_layers = tree.nodes.new("CompositorNodeRLayers")
-#     invert_node = tree.nodes.new("CompositorNodeInvert")
-#     composite = tree.nodes.new("CompositorNodeComposite")
-#     # Exclude plane from render layer
-#     for obj in bpy.data.objects:
-#         if obj.type == "MESH" and obj.name.startswith("Plane"):
-#             obj.hide_render = True
-#     # Link nodes to invert alpha
-#     tree.links.new(render_layers.outputs["Alpha"], invert_node.inputs["Color"])
-#     tree.links.new(invert_node.outputs["Color"], composite.inputs["Image"])
-#     # Render and save
-#     render_args = bpy.context.scene.render
-#     render_args.filepath = os.path.join(output_path, output_file)
-#     bpy.ops.render.render(write_still=True)
+MAX_CAMERA_ANGLE_SAMPLES = 50
+MAX_RENDER_ATTEMPTS = 5
+BLENDER_CAMERA_FOV_ANGLE_RADS = math.radians(60)
 
 
-# def check_overlap(
-#     obj1: bpy.types.Object,
-#     obj2: bpy.types.Object,
-#     camera: bpy.types.Object,
-#     width: int,
-#     height: int,
-#     direction: str,
-# ) -> bool:
-#     """Determine if two objects overlap in the rendered image by analyzing their intersecting pixels.
-
-#     Args:
-#         obj1: The first object in the scene.
-#         obj2: The second object in the scene.
-#         camera: The camera object used for rendering the scene.
-#         width: The width of the rendered image in pixels.
-#         height: The height of the rendered image in pixels.
-#         direction: The relative direction of the second object with respect to the first object.
-
-#     Returns:
-#         True if the two objects overlap, False otherwise.
-#         "Overlap" is defined as follows:
-#         (1) If the smaller object is behind the bigger one and the intersecting pixels exceed 75% of the smaller object's pixels.
-#         (2) If the objects are side by side and there are any shared pixels between the objects.
-#         This function is used to skip scenes where one object is blocked by the other or if they are too close to each other.
-#     """
-#     # Get all meshes in the scene
-#     bboxes = []
-#     obj_areas = []
-#     for obj in [obj1, obj2]:
-#         # project all bounding box corners into camera views
-#         coords_2d = [
-#             bpy_extras.object_utils.world_to_camera_view(
-#                 bpy.context.scene, camera, obj.matrix_world @ Vector(corner)
-#             )
-#             for corner in obj.bound_box
-#         ]
-#         us = [co.x for co in coords_2d]
-#         vs = [co.y for co in coords_2d]
-#         min_u, max_u = min(us), max(us)
-#         min_v, max_v = min(vs), max(vs)
-#         # convert normalized coordinates into pixel coordinates
-#         x_min = min_u * width
-#         x_max = max_u * width
-#         y_min = min_v * height
-#         y_max = max_v * height
-#         area = max(0, x_max - x_min) * max(0, y_max - y_min)
-#         bboxes.append((x_min, x_max, y_min, y_max, area))
-#         obj_areas.append(area)
-#     # calculate the intersection area
-#     x_min1, x_max1, y_min1, y_max1, _ = bboxes[0]
-#     x_min2, x_max2, y_min2, y_max2, _ = bboxes[1]
-#     inter_x = max(0, min(x_max1, x_max2) - max(x_min1, x_min2))
-#     inter_y = max(0, min(y_max1, y_max2) - max(y_min1, y_min2))
-#     intersection_area = inter_x * inter_y
-#     # check if the intersection area is non-zero for side-by-side cases
-#     if direction in ["left", "right"]:
-#         return intersection_area > 0
-#     # check if the intersection area is larger than 75% of the smaller object for front/behind cases
-#     if intersection_area >= 0.75 * min(obj_areas):
-#         return (obj_areas[0] < obj_areas[1] and direction == "front") or (
-#             obj_areas[0] >= obj_areas[1] and direction == "behind"
-#         )
-#     return False
+@dataclass
+class BoundingBox:
+    center: Vector
+    corners: list[Vector]
 
 
-# def render_scene_3drf(
-#     args: argparse.Namespace,
-#     config: Dict[str, Any],
-#     camera_settings: Dict[str, Any],
-#     properties: Dict[str, Any],
-#     index: int,
-#     output_image: str,
-#     output_scene: str,
-#     objects: List[Dict[str, Any]],
-#     direction: str,
-# ) -> None:
-#     """Render a scene and save it to disk.
-
-#     Args:
-#         args: Global parsed arguments.
-#         config: Config file for the scene.
-#         camera_settings: Camera settings for the scene.
-#         properties: JSON data containing object properties.
-#         index: Index of the scene.
-#         output_image: Output image file path.
-#         output_scene: Output scene file path.
-#         objects: Configs for objects to add to the scene.
-#         direction: Direction of the second object to the first object (in relative frame).
-#     """
-#     intrinsic_directions = config["intrinsic_directions"]
-#     caption_templates = config["caption_templates"]
-#     # load the main blendfile and materials
-#     bpy.ops.wm.open_mainfile(filepath=config["base_scene_blendfile"])
-#     # use BLENDER_RENDER to render
-#     render_args = bpy.context.scene.render
-#     render_args.engine = "CYCLES"
-#     render_args.filepath = output_image
-#     render_args.resolution_x = config["width"]
-#     render_args.resolution_y = config["height"]
-#     render_args.resolution_percentage = 100
-#     bpy.context.scene.cycles.tile_x = config["render_tile_size"]
-#     bpy.context.scene.cycles.tile_y = config["render_tile_size"]
-#     if config["use_gpu"]:
-#         bpy.context.scene.cycles.device = "GPU"
-#     # define scene structure
-#     scene_struct = {
-#         "image_index": index,
-#         "image_filename": os.path.basename(output_image),
-#     }
-#     # get ground and figure objects
-#     ground, figure = objects
-#     # put a helper plane on the ground for easier calculation of the directions
-#     bpy.ops.mesh.primitive_plane_add(size=5)
-#     plane = bpy.context.object
-#     # set up camera
-#     camera = bpy.data.objects["Camera"]
-#     camera.rotation_euler = (
-#         math.radians(camera_settings["tilt"]),
-#         0,
-#         math.radians(camera_settings["pan"]),
-#     )
-#     camera.location[2] = camera_settings["height"]
-#     camera.data.lens = camera_settings["focal_length"]
-#     scene_struct["camera"] = camera_settings
-#     # calculate the directions in the scene
-#     plane_normal = plane.data.vertices[0].normal
-#     cam_behind = camera.matrix_world.to_quaternion() @ Vector((0, 0, -1))
-#     cam_left = camera.matrix_world.to_quaternion() @ Vector((-1, 0, 0))
-#     plane_behind = (cam_behind - cam_behind.project(plane_normal)).normalized()
-#     plane_left = (cam_left - cam_left.project(plane_normal)).normalized()
-#     # delete the helper plane
-#     bpy.ops.object.delete()
-#     # All axis-aligned directions in the scene
-#     scene_directions = {
-#         "behind": tuple(plane_behind),
-#         "front": tuple(-plane_behind),
-#         "left": tuple(plane_left),
-#         "right": tuple(-plane_left),
-#     }
-#     # Calculate positions and add objects
-#     direction_vector = np.array(scene_directions[direction])[:2]
-#     normalized_direction = direction_vector / np.linalg.norm(direction_vector)
-#     ground["position"] = (
-#         -normalized_direction * (args.distance_between_objects / 2)
-#     ).tolist()
-#     figure["position"] = (
-#         normalized_direction * (args.distance_between_objects / 2)
-#     ).tolist()
-#     add_objects_3drf(objects, config, properties)
-#     # Set background color to light grey
-#     bpy.context.scene.world.use_nodes = True
-#     bg_node = bpy.context.scene.world.node_tree.nodes["Background"]
-#     bg_node.inputs["Color"].default_value = (0.5, 0.5, 0.5, 1)
-#     # render the scene and dump the scene data structure
-#     while True:
-#         try:
-#             bpy.ops.render.render(write_still=True)
-#             break
-#         except Exception as e:
-#             print(e)
-#     # If overlap exists, remove the rendered image, and skip
-#     if check_overlap(
-#         bpy.data.objects[ground["name"]],
-#         bpy.data.objects[figure["name"]],
-#         camera,
-#         config["width"],
-#         config["height"],
-#         direction,
-#     ):
-#         print("\nOverlap detected, skipping...\n")
-#         os.remove(output_image)
-#         return
-#     # extract the masks
-#     extract_masks_3drf(config["masks_dir"], os.path.basename(output_image))
-#     # save the scene data structure
-#     scene_struct["ground_object"] = {
-#         "name": ground["name"],
-#         "orientation": ground["orientation"],
-#         "rotation": ground["rotation"],
-#         "position": ground["position"],
-#     }
-#     scene_struct["figure_object"] = {
-#         "name": figure["name"],
-#         "orientation": figure["orientation"],
-#         "rotation": figure["rotation"],
-#         "position": figure["position"],
-#     }
-#     # generate the captions
-#     reversed_direction = {
-#         "behind": "front",
-#         "front": "behind",
-#         "left": "right",
-#         "right": "left",
-#     }
-#     scene_struct["translational_relation_caption"] = caption_templates["3d_translation"][
-#         direction
-#     ].format(figure["name"], ground["name"])
-#     scene_struct["reflectional_relation_caption"] = caption_templates["3d_reflection"][
-#         direction
-#     ].format(figure["name"], ground["name"])
-#     if ground["orientation"]:
-#         scene_struct["ground_object"]["intrinsic_relation"] = intrinsic_directions[
-#             ground["orientation"]
-#         ][direction]
-#         scene_struct["ground_object"]["intrinsic_caption"] = caption_templates[
-#             "3d_intrinsic"
-#         ][scene_struct["ground_object"]["intrinsic_relation"]].format(
-#             ground["name"], figure["name"]
-#         )
-#     if figure["orientation"]:
-#         scene_struct["figure_object"]["intrinsic_relation"] = intrinsic_directions[
-#             figure["orientation"]
-#         ][reversed_direction[direction]]
-#         scene_struct["figure_object"]["intrinsic_caption"] = caption_templates[
-#             "3d_intrinsic"
-#         ][scene_struct["figure_object"]["intrinsic_relation"]].format(
-#             figure["name"], ground["name"]
-#         )
-#     with open(output_scene, "w") as f:
-#         json.dump(scene_struct, f, indent=2)
+def compute_combined_bbox(objects: list[bpy.types.Object]) -> BoundingBox:
+    """Compute the combined AABB of all objects in world space. Returns center and 8 corners."""
+    all_corners: list[Vector] = []
+    for obj in objects:
+        for corner in obj.bound_box:
+            all_corners.append(obj.matrix_world @ Vector(corner))
+    if not all_corners:
+        return BoundingBox(center=Vector((0, 0, 0)), corners=[])
+    min_x = min(v.x for v in all_corners)
+    max_x = max(v.x for v in all_corners)
+    min_y = min(v.y for v in all_corners)
+    max_y = max(v.y for v in all_corners)
+    min_z = min(v.z for v in all_corners)
+    max_z = max(v.z for v in all_corners)
+    center = Vector(((min_x + max_x) / 2, (min_y + max_y) / 2, (min_z + max_z) / 2))
+    corners = [
+        Vector((min_x, min_y, min_z)),
+        Vector((min_x, min_y, max_z)),
+        Vector((min_x, max_y, min_z)),
+        Vector((min_x, max_y, max_z)),
+        Vector((max_x, min_y, min_z)),
+        Vector((max_x, min_y, max_z)),
+        Vector((max_x, max_y, min_z)),
+        Vector((max_x, max_y, max_z)),
+    ]
+    return BoundingBox(center=center, corners=corners)
 
 
-def place_objects(specs: List[ObjectPlacementSpec]) -> None:
+def convert_pitch_and_tilt_to_unit_vector(pitch: float, tilt: float) -> Vector:
+    """Convert pitch and tilt to a normal unit vector."""
+    el, az = pitch, tilt
+    vec = Vector(
+        (
+            math.cos(el) * math.cos(az),
+            math.cos(el) * math.sin(az),
+            -math.sin(el),
+        )
+    )
+    vec.normalize()
+    return vec
+
+
+def place_objects(specs: list[ObjectPlacementSpec]) -> list[bpy.types.Object]:
     """Add objects to the current Blender scene according to placement specifications."""
+    placed: list[bpy.types.Object] = []
     for spec in specs:
         object_data = BLENDER_OBJECTS[spec.object_name]
 
@@ -322,51 +125,227 @@ def place_objects(specs: List[ObjectPlacementSpec]) -> None:
 
         # De-select all objects
         bpy.ops.object.select_all(action="DESELECT")
+        placed.append(selected_obj)
+    return placed
 
 
-def render_scene(
-    object_placement_specs: List[ObjectPlacementSpec], n_povs: int = 1
+def compute_min_camera_distance_to_capture_bbox(
+    bbox: BoundingBox,
+    camera_pitch: float,
+    camera_tilt: float,
+    camera_fov_angle_rads: float,
+    camera_aspect_ratio: float,
+) -> float:
+    """
+    Assuming a camera pointing in this direction towards the center of the bounding box,
+    returns the minimum camera distance such that the projection of all eight bbox corners
+    lies within the normalized image frame. Assume z is up and camera roll is 0.
+    """
+    if not bbox.corners:
+        return 0.0
+    center = bbox.center
+    corners = bbox.corners
+    look_dir = convert_pitch_and_tilt_to_unit_vector(camera_pitch, camera_tilt)
+    # Camera frame derived from look_dir with Z-up reference (matches Blender's to_track_quat)
+    rot = look_dir.to_track_quat("-Z", "Y").to_matrix()
+    right = Vector(rot.col[0])  # camera local +X
+    up = Vector(rot.col[1])  # camera local +Y
+    # Half-angles: Blender angle is horizontal FOV
+    half_h = camera_fov_angle_rads / 2
+    half_v = math.atan(math.tan(half_h) / camera_aspect_ratio)
+    tan_h = math.tan(half_h)
+    tan_v = math.tan(half_v)
+    d_candidates: list[float] = []
+    for p in corners:
+        p_rel = p - center
+        depth_offset = p_rel.dot(look_dir)
+        x_cam = p_rel.dot(right)
+        y_cam = p_rel.dot(up)
+        min_depth = max(abs(x_cam) / tan_h, abs(y_cam) / tan_v)
+        d_candidates.append(min_depth - depth_offset)
+    return max(0.0, max(d_candidates))
+
+
+def render_object_masks(
+    placed_objects: list[bpy.types.Object],
+) -> list[np.ndarray]:
+    """Render a binary alpha mask for each placed object individually.
+
+    Switches to EEVEE for speed, enables transparent film, and renders each
+    object in isolation (all other meshes hidden).  Returns a list of binary
+    masks (H x W, values 0.0 or 1.0), one per placed object.
+    """
+    scene = bpy.context.scene
+    render_args = scene.render
+
+    # Save render state to restore later
+    orig_engine = render_args.engine
+    orig_film_transparent = render_args.film_transparent
+    orig_file_format = render_args.image_settings.file_format
+    orig_color_mode = render_args.image_settings.color_mode
+    orig_filepath = render_args.filepath
+    orig_hide_render = {obj.name: obj.hide_render for obj in bpy.data.objects}
+
+    # Configure for fast mask rendering
+    render_args.engine = "BLENDER_EEVEE_NEXT"  # Use BLENDER_EEVEE_NEXT on Blender 4.0/4.1
+    render_args.film_transparent = True
+    render_args.image_settings.file_format = "PNG"
+    render_args.image_settings.color_mode = "RGBA"
+
+    masks: list[np.ndarray] = []
+    h, w = render_args.resolution_y, render_args.resolution_x
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        for idx, target_obj in enumerate(placed_objects):
+            # Hide every mesh in the scene except the target object
+            for obj in bpy.data.objects:
+                if obj.type == "MESH":
+                    obj.hide_render = obj.name != target_obj.name
+
+            tmp_path = os.path.join(tmp_dir, f"mask_{idx}.png")
+            render_args.filepath = tmp_path
+            bpy.ops.render.render(write_still=True)
+
+            # Load rendered image and extract alpha channel as a binary mask
+            img = bpy.data.images.load(tmp_path)
+            pixels = np.array(img.pixels[:]).reshape((h, w, 4))
+            mask = (pixels[:, :, 3] > 0.5).astype(np.float32)
+            masks.append(mask)
+            bpy.data.images.remove(img)
+
+    # Restore all render state
+    for obj in bpy.data.objects:
+        if obj.name in orig_hide_render:
+            obj.hide_render = orig_hide_render[obj.name]
+    render_args.engine = orig_engine
+    render_args.film_transparent = orig_film_transparent
+    render_args.image_settings.file_format = orig_file_format
+    render_args.image_settings.color_mode = orig_color_mode
+    render_args.filepath = orig_filepath
+
+    return masks
+
+
+def save_masks(
+    masks: list[np.ndarray],
+    placed_objects: list[bpy.types.Object],
+    pov_index: int,
 ) -> None:
+    """Save individual per-object masks and a combined mask to OUTPUT_MASKS_DIR_PATH.
+
+    Files are named ``{pov_index:04d}_{object_name}.png`` for individual masks
+    and ``{pov_index:04d}_all_objects.png`` for the combined (union) mask.
+    """
+    if not masks:
+        return
+    h, w = masks[0].shape
+
+    def _write_mask(mask: np.ndarray, filepath: str) -> None:
+        img = bpy.data.images.new("_tmp_mask_save", width=w, height=h)
+        rgba = np.zeros((h, w, 4), dtype=np.float32)
+        rgba[:, :, 0] = mask
+        rgba[:, :, 1] = mask
+        rgba[:, :, 2] = mask
+        rgba[:, :, 3] = 1.0
+        img.pixels[:] = rgba.flatten()
+        img.filepath_raw = filepath
+        img.file_format = "PNG"
+        img.save()
+        bpy.data.images.remove(img)
+
+    # Save individual object masks
+    for mask, obj in zip(masks, placed_objects):
+        path = str(OUTPUT_MASKS_DIR_PATH / f"{pov_index:04d}_{obj.name}.png")
+        _write_mask(mask, path)
+
+    # Save combined (union) mask
+    combined = np.clip(np.sum(masks, axis=0), 0.0, 1.0)
+    path = str(OUTPUT_MASKS_DIR_PATH / f"{pov_index:04d}_all_objects.png")
+    _write_mask(combined, path)
+
+
+def render_scene(object_placement_specs: list[ObjectPlacementSpec]) -> None:
     bpy.ops.wm.open_mainfile(filepath=str(BASE_SCENE_PATH))
-    place_objects(object_placement_specs)
+    # Place objects in the scene according to the placement specifications
+    placed_objects = place_objects(object_placement_specs)
+    # Make sure all objects are visible and will be included in renders
+    scene_collection = bpy.context.scene.collection
+    for obj in placed_objects:
+        obj.hide_render = False
+        obj.hide_viewport = False
+        if scene_collection.name not in (c.name for c in obj.users_collection):
+            scene_collection.objects.link(obj)
+    bbox_all_objects = compute_combined_bbox(placed_objects)
+    # Setup camera
+    camera = bpy.data.objects["Camera"]
+    # Set FOV and resolution
+    camera.data.angle = BLENDER_CAMERA_FOV_ANGLE_RADS
+    render_args = bpy.context.scene.render
+    render_args.resolution_x = IMG_RESOLUTION_X
+    render_args.resolution_y = IMG_RESOLUTION_Y
+    aspect_ratio = IMG_RESOLUTION_X / IMG_RESOLUTION_Y
+    render_args.resolution_percentage = 100
+    camera.rotation_mode = "XYZ"
+    # Render for each POV
+    for i in range(N_POVS):
+        # Try to find a camera angle with no visual overlap between objects
+        masks: list[np.ndarray] = []
+        found_useable_angle = False
+        for _attempt in range(MAX_CAMERA_ANGLE_SAMPLES):
+            # Sample a camera angle to look down at the objects from
+            tilt_min, tilt_max = 0.174, math.pi / 2
+            tilt_mean = math.radians(45)
+            tilt_std = math.radians(15)
+            tilt = np.clip(np.random.normal(tilt_mean, tilt_std), tilt_min, tilt_max)
+            pan = np.random.uniform(-math.pi, math.pi)
+            min_distance = compute_min_camera_distance_to_capture_bbox(
+                bbox=bbox_all_objects,
+                camera_pitch=tilt,
+                camera_tilt=pan,
+                camera_fov_angle_rads=BLENDER_CAMERA_FOV_ANGLE_RADS,
+                camera_aspect_ratio=aspect_ratio,
+            )
+            # Add a little bit of distance to the minimum distance
+            distance = np.random.uniform(0.03, 0.15) * min_distance + min_distance
+            # Camera points at bbox center; place it at center - distance * look_dir (Z-up)
+            look_dir = convert_pitch_and_tilt_to_unit_vector(tilt, pan)
+            camera.location = bbox_all_objects.center - distance * look_dir
+            # Derive rotation from look_dir so camera actually faces the bbox center
+            # Camera local -Z should align with look_dir, with world Z as up reference
+            camera.rotation_euler = look_dir.to_track_quat("-Z", "Y").to_euler("XYZ")
+            # Render per-object masks and check for visual overlap
+            masks = render_object_masks(placed_objects)
+            pov_has_object_overlap = bool(np.any(np.sum(masks, axis=0) > 1))
+            if pov_has_object_overlap:
+                continue
+            found_useable_angle = True
+            break
 
-    # TODO (later): Render the scene from different viewpoints
+        if not found_useable_angle:
+            raise ValueError(
+                "Failed to sample a camera angle in which objects did not overlap "
+                f"after {MAX_CAMERA_ANGLE_SAMPLES} attempts."
+            )
 
-    # Frame the view so all objects are visible (skipped in --background mode)
-    bpy.ops.object.select_all(action="SELECT")
-    try:
-        bpy.ops.view3d.view_selected()
-    except RuntimeError:
-        pass
-    bpy.ops.object.select_all(action="DESELECT")
+        # Save per-object and combined masks
+        save_masks(masks, placed_objects, i)
 
-    # Save in parent of dir this file is in
-    out_path = _Path(__file__).resolve().parent.parent.parent / "test_output.blend"
-    bpy.ops.wm.save_as_mainfile(filepath=str(out_path))
-    print(f"Saved scene to {out_path}")
-
-
-def _placement_spec_from_dict(d: Dict[str, Any]) -> ObjectPlacementSpec:
-    """Build ObjectPlacementSpec from a JSON-loaded dict (lists become tuples)."""
-    loc = d["target_location"]
-    facing = d.get("target_facing_direction")
-    return ObjectPlacementSpec(
-        object_name=d["object_name"],
-        target_location=(loc[0], loc[1], loc[2]) if isinstance(loc, list) else loc,
-        target_facing_direction=(
-            ((facing[0], facing[1], facing[2]) if isinstance(facing, list) else facing)
-            if facing is not None
-            else None
-        ),
-        touching_ground=d["touching_ground"],
-    )
+        # Render the scene: output path per POV, bounded retry
+        output_image = OUTPUT_RENDERS_DIR_PATH / f"render_{i:04d}.png"
+        render_args.filepath = str(output_image)
+        for attempt in range(MAX_RENDER_ATTEMPTS):
+            try:
+                bpy.ops.render.render(write_still=True)
+                break
+            except Exception as e:
+                print(f"Render attempt {attempt + 1}/{MAX_RENDER_ATTEMPTS} failed: {e}")
+        else:
+            print(f"Gave up after {MAX_RENDER_ATTEMPTS} render attempts for POV {i}.")
 
 
 if __name__ == "__main__":
     with open(TEMP_JSON_PATH, "r") as f:
         obj_placement_specs = json.load(f)
     os.remove(TEMP_JSON_PATH)
-    object_placement_specs = [
-        _placement_spec_from_dict(spec) for spec in obj_placement_specs
-    ]
+    object_placement_specs = [ObjectPlacementSpec(**spec) for spec in obj_placement_specs]
     render_scene(object_placement_specs)

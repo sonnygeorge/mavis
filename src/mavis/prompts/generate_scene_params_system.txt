@@ -14,8 +14,8 @@ class ObjectPlacementSpec:
     """
 
     object_name: str
-    target_location: tuple[float, float, float]
-    target_facing_direction: tuple[float, float, float] | None
+    target_location: list[float]
+    target_facing_direction: list[float] | None
     touching_ground: bool
 ```
 
