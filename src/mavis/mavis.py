@@ -96,6 +96,11 @@ def run(
     # 2. Generate scene specs
     scene_characteristics, action_scene_specs = generate_scene_specs(llm, action_scene)
 
+    print("Orientation specs:")
+    print(action_scene_specs.orientation)
+    print("Pose specs:")
+    print(action_scene_specs.pose)
+
     # 3. Generate scene params
     obj_placement_specs = generate_scene_params(
         llm, action_scene, scene_characteristics, action_scene_specs
