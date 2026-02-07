@@ -2,23 +2,35 @@ import json
 import os
 import subprocess
 import sys
+import shutil
+import warnings
 from pathlib import Path
 from datetime import datetime
+from requests.exceptions import HTTPError
 
 from PIL import Image
+
 from tenacity import retry, stop_after_attempt
 
 from mavis.schema import ActionScene, ActionSceneSpecs
-from mavis.llm import LLM
+from mavis.vlm import VLM
+from mavis.edits import add_background, modify_pose
+from mavis.checks import objects_are_preserved, is_object_animate
 from mavis.prompts import (
     render_generate_scene_specs_prompt,
     render_generate_scene_setup_code_prompt,
 )
+from mavis.utils import get_completed_renders
 from mavis.responses import (
     parse_generate_scene_specs_response,
     parse_generate_scene_params_response,
 )
-from mavis.globals import BASE_SCENE_PATH, TEMP_JSON_PATH, CUR_RUN_UID_ENV_VAR
+from mavis.globals import (
+    BASE_SCENE_PATH,
+    TEMP_JSON_PATH,
+    CUR_RUN_UID_ENV_VAR,
+    FINAL_OUTPUTS_DIR_PATH,
+)
 
 
 # TODO: (a "someday" improvement)
@@ -26,24 +38,31 @@ from mavis.globals import BASE_SCENE_PATH, TEMP_JSON_PATH, CUR_RUN_UID_ENV_VAR
 # Immediate retry on output parsing errors
 
 
+class MaxRetries:
+    GENERATE_SCENE_SPECS = 3
+    GENERATE_SCENE_PARAMS = 3
+    ADD_BACKGROUND = 4
+    MODIFY_POSE = 3
+
+
 def assess_generation_feasibility(action_scene: ActionScene) -> tuple[bool, str | None]:
     # TODO: Implement
     return True, None
 
 
-@retry(stop=stop_after_attempt(3))
+@retry(stop=stop_after_attempt(MaxRetries.GENERATE_SCENE_SPECS))
 def generate_scene_specs(
-    llm: LLM, action_scene: ActionScene
+    vlm: VLM, action_scene: ActionScene
 ) -> tuple[str, ActionSceneSpecs]:
     prompts = render_generate_scene_specs_prompt(action_scene)
-    response = llm.generate(prompts)
+    response = vlm.generate(prompts)
     scene_characteristics, scene_specs = parse_generate_scene_specs_response(response)
     return scene_characteristics, scene_specs
 
 
-@retry(stop=stop_after_attempt(3))
+@retry(stop=stop_after_attempt(MaxRetries.GENERATE_SCENE_PARAMS))
 def generate_scene_params(
-    llm: LLM,
+    vlm: VLM,
     action_scene: ActionScene,
     scene_characteristics: str,
     action_scene_specs: ActionSceneSpecs,
@@ -53,7 +72,7 @@ def generate_scene_params(
         scene_characteristics,
         action_scene_specs,
     )
-    response = llm.generate(prompts)
+    response = vlm.generate(prompts)
     return parse_generate_scene_params_response(response)
 
 
@@ -81,7 +100,7 @@ def invoke_and_await_scene_render_subprocess() -> None:
 
 
 def run(
-    llm: LLM, action_scene: ActionScene, n_camera_positions: int = 1
+    vlm: VLM, action_scene: ActionScene, n_camera_positions: int = 1
 ) -> list[Image.Image]:
     # 1. Assess generation feasibility
     generation_is_feasible, reason = assess_generation_feasibility(action_scene)
@@ -94,7 +113,7 @@ def run(
     print(f"Beginning pipeline run with UID: {run_uid}")
 
     # 2. Generate scene specs
-    scene_characteristics, action_scene_specs = generate_scene_specs(llm, action_scene)
+    scene_characteristics, action_scene_specs = generate_scene_specs(vlm, action_scene)
 
     print("Orientation specs:")
     print(action_scene_specs.orientation)
@@ -103,7 +122,7 @@ def run(
 
     # 3. Generate scene params
     obj_placement_specs = generate_scene_params(
-        llm, action_scene, scene_characteristics, action_scene_specs
+        vlm, action_scene, scene_characteristics, action_scene_specs
     )
 
     # # TODO: Remove this convenient hardcoded artifact used for quicker testing
@@ -134,22 +153,85 @@ def run(
     #     },
     # ]
 
-    # 4. Invoke Blender to render the scene (reads TEMP_JSON_PATH, saves output)
     with open(TEMP_JSON_PATH, "w") as f:
         json.dump(obj_placement_specs, f)
+
+    # 4. Invoke Blender to render the scene (reads TEMP_JSON_PATH, saves renders))
     invoke_and_await_scene_render_subprocess()
 
-    # TODO: The rest of the pipeline
+    # 5. Make edits to rendered images
+    edits_were_successful = {}
+    for render_id, render_path, masks in get_completed_renders(run_uid):
+        # 5.1. Add background
+        bg_added_successfully = False
+        for _ in range(MaxRetries.ADD_BACKGROUND):
+            try:
+                img_with_bg_path = add_background(
+                    render_id=render_id,
+                    run_uid=run_uid,
+                    render_path=render_path,
+                    action_scene=action_scene,
+                )
+            except HTTPError as e:
+                warnings.warn(f"HTTP error: {e}")
+                break
 
-    # output_images = []
-    # for rendered_image, masks in zip(all_rendered_images, all_masks):
-    #     # 7. Inpaint background
-    #     cur_img = inpaint_background(rendered_image, masks)
+            if objects_are_preserved(img_with_bg_path, action_scene, vlm):
+                bg_added_successfully = True
+                break
 
-    #     # 8. Inpaint pose requirements
-    #     for pose_spec in scene_specs.pose:
-    #         cur_img = inpaint_pose_spec(cur_img, masks, pose_spec)
+        if not bg_added_successfully:
+            warnings.warn(
+                f"Failed to add background for render {render_id} after "
+                f"{MaxRetries.ADD_BACKGROUND} retries. Skipping this render."
+            )
+            edits_were_successful[render_id] = False
+            print(f"FAILED: edits aborted for render {render_id}.")
+            continue
 
-    #     output_images.append(cur_img)
+        # 5.2. Modify poses
+        cur_img_path = img_with_bg_path
+        for object_name, pose_specs in action_scene_specs.pose.items():
+            if not is_object_animate(object_name, vlm):
+                continue  # Don't try to modify poses of inanimate objects (too hard for models)
 
-    # return output_images
+            pose_was_successfully_modified = False
+            for _ in range(MaxRetries.MODIFY_POSE):
+                try:
+                    modified_pose_path = modify_pose(
+                        render_id=render_id,
+                        run_uid=run_uid,
+                        start_img_path=cur_img_path,
+                        object_name=object_name,
+                        pose_specs=pose_specs,
+                        masks=masks,
+                    )
+                    if objects_are_preserved(modified_pose_path, action_scene, vlm):
+                        pose_was_successfully_modified = True
+                        cur_img_path = modified_pose_path
+                        break
+                except HTTPError as e:
+                    warnings.warn(f"HTTP error: {e}")
+                    break
+            if not pose_was_successfully_modified:
+                break
+
+        if not pose_was_successfully_modified:
+            warnings.warn(
+                f"Failed to modify pose for object {object_name} after "
+                f"{MaxRetries.MODIFY_POSE} retries. Skipping this render."
+            )
+            edits_were_successful[render_id] = False
+            print(f"FAILED: edits aborted for render {render_id}.")
+            continue
+
+        edits_were_successful[render_id] = True
+        print(f"SUCCESS: edits made to render {render_id}.")
+
+        # If edits were successful, copy the final image to the final output dir
+        final_output_dir = FINAL_OUTPUTS_DIR_PATH / run_uid
+        final_output_dir.mkdir(parents=True, exist_ok=True)
+        if edits_were_successful[render_id]:
+            shutil.copy(cur_img_path, final_output_dir / f"{render_id}.png")
+
+    print(f"Edits were successful: {edits_were_successful}")

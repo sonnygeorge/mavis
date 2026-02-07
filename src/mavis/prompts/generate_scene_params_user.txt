@@ -1,6 +1,6 @@
 BLENDER OBJECTS:
 
-{% for blender_object in blender_objects %}
+{% for blender_object in blender_objects -%}
 - {{ blender_object }}
 {% endfor %}
 

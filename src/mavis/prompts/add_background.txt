@@ -1,0 +1,1 @@
+Keeping the existing objects intact, unmoved, and otherwise unchanged, fill the image with a realistic {{ background_type }} scene backdrop that is congruent with the camera's perspective w.r.t. the existing objects. Make sure to keep the existing {{ objects_str }} coherent and intact without adding any new objects or entities to the scene.

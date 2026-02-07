@@ -3,10 +3,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Optional
 
-N_POVS = 4
+N_POVS = 6
 
 IMG_RESOLUTION_X = 512
 IMG_RESOLUTION_Y = 512
+
+IMG_EDITS_MODEL = "fal-ai/flux-2/turbo/edit"
+# IMG_EDITS_MODEL = "fal-ai/hunyuan-image/v3/instruct/edit" # Takes a long time, is good
+# IMG_EDITS_MODEL = "fal-ai/qwen-image-max/edit" # Expensive/bad
+# IMG_EDITS_MODEL = "fal-ai/gpt-image-1.5/edit" # Bad at local edits
+# IMG_EDITS_MODEL = "fal-ai/gemini-flash-edit/multi"
 
 OBJAVERSE_DIR_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "objaverse"
 OBJAVERSE_SHAPES_DIR_PATH = OBJAVERSE_DIR_PATH / "shapes"
@@ -19,8 +25,11 @@ TEMP_JSON_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "temp.
 OUTPUT_DIR_PATH = Path(__file__).resolve().parent.parent.parent / "outputs"
 OUTPUT_RENDERS_DIR_PATH = OUTPUT_DIR_PATH / "renders"
 OUTPUT_MASKS_DIR_PATH = OUTPUT_DIR_PATH / "masks"
+OUTPUT_EDITS_DIR_PATH = OUTPUT_DIR_PATH / "edits"
+FINAL_OUTPUTS_DIR_PATH = OUTPUT_DIR_PATH / "final"
 
 CUR_RUN_UID_ENV_VAR = "CUR_MAVIS_RUN_UID"
+
 
 @dataclass
 class BlenderObject:

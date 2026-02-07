@@ -1,0 +1,5 @@
+"""Modify ONLY the pose of the existing {{ object }} (whose position is given in the mask) to be as follows while keeping everything else the exact same as it now. Maintain the {{ object }}'s relative position to other things (which must remain unedited).
+{% for pose_spec in pose_specs -%}
+- {{ pose_spec }}
+{% endfor -%}
+"""

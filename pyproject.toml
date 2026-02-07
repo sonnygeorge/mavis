@@ -13,6 +13,11 @@ dependencies = [
     "pydantic>=2.12.5",
     "tenacity>=9.0.0",
     "mathutils>=3.3.0",
+    "torch>=2.10.0",
+    "diffusers>=0.36.0",
+    "huggingface-hub>=1.4.1",
+    "transformers>=5.1.0",
+    "fal-client>=0.13.0",
 ]
 
 [dependency-groups]

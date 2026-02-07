@@ -271,6 +271,24 @@ def save_masks(
 
 def render_scene(object_placement_specs: list[ObjectPlacementSpec], run_uid: str) -> None:
     bpy.ops.wm.open_mainfile(filepath=str(BASE_SCENE_PATH))
+
+    # Explicit render engine and lighting setup
+    render_args = bpy.context.scene.render
+    render_args.engine = "CYCLES"
+    render_args.film_transparent = False
+
+    # Set up world environment lighting (grey ambient light)
+    world = bpy.context.scene.world
+    if world is None:
+        world = bpy.data.worlds.new("World")
+        bpy.context.scene.world = world
+    world.use_nodes = True
+    bg_node = world.node_tree.nodes.get("Background")
+    if bg_node is None:
+        bg_node = world.node_tree.nodes.new("ShaderNodeBackground")
+    bg_node.inputs["Color"].default_value = (0.5, 0.5, 0.5, 1)
+    bg_node.inputs["Strength"].default_value = 1.0
+
     # Place objects in the scene according to the placement specifications
     placed_objects = place_objects(object_placement_specs)
     # Make sure all objects are visible and will be included in renders
@@ -285,7 +303,6 @@ def render_scene(object_placement_specs: list[ObjectPlacementSpec], run_uid: str
     camera = bpy.data.objects["Camera"]
     # Set FOV and resolution
     camera.data.angle = BLENDER_CAMERA_FOV_ANGLE_RADS
-    render_args = bpy.context.scene.render
     render_args.resolution_x = IMG_RESOLUTION_X
     render_args.resolution_y = IMG_RESOLUTION_Y
     aspect_ratio = IMG_RESOLUTION_X / IMG_RESOLUTION_Y
@@ -298,9 +315,9 @@ def render_scene(object_placement_specs: list[ObjectPlacementSpec], run_uid: str
         found_useable_angle = False
         for _attempt in range(MAX_CAMERA_ANGLE_SAMPLES):
             # Sample a camera angle to look down at the objects from
-            tilt_min, tilt_max = 0.174, math.pi / 2
-            tilt_mean = math.radians(45)
-            tilt_std = math.radians(15)
+            tilt_min, tilt_max = 0.131, 1.412
+            tilt_mean = math.radians(34)
+            tilt_std = math.radians(12)
             tilt = np.clip(np.random.normal(tilt_mean, tilt_std), tilt_min, tilt_max)
             pan = np.random.uniform(-math.pi, math.pi)
             min_distance = compute_min_camera_distance_to_capture_bbox(

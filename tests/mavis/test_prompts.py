@@ -3,7 +3,7 @@ import pytest
 from mavis.schema import (
     RelativeWhere,
     ActionScene,
-    PromptPair,
+    VLMPrompt,
     ActionSceneSpecs,
 )
 from mavis.prompts import (
@@ -63,7 +63,7 @@ Given this, here are the specifications:
 
 def test_render_generate_scene_specs_prompt(action_scene):
     prompts = render_generate_scene_specs_prompt(action_scene)
-    assert isinstance(prompts, PromptPair)
+    assert isinstance(prompts, VLMPrompt)
 
 
 def test_render_generate_scene_setup_code_prompt(
@@ -72,4 +72,4 @@ def test_render_generate_scene_setup_code_prompt(
     prompts = render_generate_scene_setup_code_prompt(
         action_scene, scene_characteristics, action_scene_specs
     )
-    assert isinstance(prompts, PromptPair)
+    assert isinstance(prompts, VLMPrompt)

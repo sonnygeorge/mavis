@@ -1,4 +1,6 @@
 import json
+import os
+from enum import StrEnum
 from typing import Optional
 
 from pydantic import BaseModel, field_validator
@@ -107,6 +109,19 @@ class ActionScene(BaseModel):
         ]
         return "".join(p.capitalize() for p in parts)
 
+    @property
+    def object_strs(self) -> list[str]:
+        return [
+            x
+            for x in [
+                self.who.name,
+                self.what.name if self.what else None,
+                self.where.what.name if self.where else None,
+                self.to_whom.name if self.to_whom else None,
+            ]
+            if x is not None
+        ]
+
 
 class ActionSceneSpecs(BaseModel):
     position: dict[str, list[str]]
@@ -118,6 +133,16 @@ class ActionSceneSpecs(BaseModel):
         return json.dumps(self.model_dump(), indent=2)
 
 
-class PromptPair(BaseModel):
-    system: str
+class YesNo(StrEnum):
+    yes = "Yes"
+    no = "No"
+
+
+class BinaryResponse(BaseModel):
+    answer: YesNo
+
+
+class VLMPrompt(BaseModel):
+    system: str | None = None
     user: str
+    image_paths: list[os.PathLike] = []
