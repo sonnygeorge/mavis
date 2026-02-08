@@ -328,7 +328,7 @@ def render_scene(object_placement_specs: list[ObjectPlacementSpec], run_uid: str
                 camera_aspect_ratio=aspect_ratio,
             )
             # Add a little bit of distance to the minimum distance
-            distance = np.random.uniform(0.03, 0.15) * min_distance + min_distance
+            distance = np.random.uniform(0.015, 0.05) * min_distance + min_distance
             # Camera points at bbox center; place it at center - distance * look_dir (Z-up)
             look_dir = convert_pitch_and_tilt_to_unit_vector(tilt, pan)
             camera.location = bbox_all_objects.center - distance * look_dir

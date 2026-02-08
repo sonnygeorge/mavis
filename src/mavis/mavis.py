@@ -8,6 +8,8 @@ from pathlib import Path
 from datetime import datetime
 from requests.exceptions import HTTPError
 
+from fal_client.client import FalClientHTTPError
+
 from PIL import Image
 
 from tenacity import retry, stop_after_attempt
@@ -15,7 +17,7 @@ from tenacity import retry, stop_after_attempt
 from mavis.schema import ActionScene, ActionSceneSpecs
 from mavis.vlm import VLM
 from mavis.edits import add_background, modify_pose
-from mavis.checks import objects_are_preserved, is_object_animate
+from mavis.checks import objects_are_preserved, is_object_animate, pose_edit_is_improvement
 from mavis.prompts import (
     render_generate_scene_specs_prompt,
     render_generate_scene_setup_code_prompt,
@@ -27,6 +29,7 @@ from mavis.responses import (
 )
 from mavis.globals import (
     BASE_SCENE_PATH,
+    SCENE_SPECS_DIR_PATH,
     TEMP_JSON_PATH,
     CUR_RUN_UID_ENV_VAR,
     FINAL_OUTPUTS_DIR_PATH,
@@ -42,7 +45,7 @@ class MaxRetries:
     GENERATE_SCENE_SPECS = 3
     GENERATE_SCENE_PARAMS = 3
     ADD_BACKGROUND = 4
-    MODIFY_POSE = 3
+    MODIFY_STATE = 3
 
 
 def assess_generation_feasibility(action_scene: ActionScene) -> tuple[bool, str | None]:
@@ -102,6 +105,7 @@ def invoke_and_await_scene_render_subprocess() -> None:
 def run(
     vlm: VLM, action_scene: ActionScene, n_camera_positions: int = 1
 ) -> list[Image.Image]:
+
     # 1. Assess generation feasibility
     generation_is_feasible, reason = assess_generation_feasibility(action_scene)
     if not generation_is_feasible:
@@ -110,15 +114,16 @@ def run(
     # Create short UID for the run and set the env variable
     run_uid = f"{datetime.now().strftime('%y%m%d%H%M%S')}_{action_scene.shorthand_str}"
     os.environ[CUR_RUN_UID_ENV_VAR] = run_uid
-    print(f"Beginning pipeline run with UID: {run_uid}")
+    print(f"Beginning pipeline run with UID={run_uid} and action scene:")
+    print(action_scene.as_readable_string())
 
     # 2. Generate scene specs
     scene_characteristics, action_scene_specs = generate_scene_specs(vlm, action_scene)
 
-    print("Orientation specs:")
-    print(action_scene_specs.orientation)
-    print("Pose specs:")
-    print(action_scene_specs.pose)
+    # Save scene specs as JSON to SCENE_PARAMS_DIR_PATH
+    SCENE_SPECS_DIR_PATH.mkdir(parents=True, exist_ok=True)
+    with open(SCENE_SPECS_DIR_PATH / f"{run_uid}.json", "w") as f:
+        json.dump(action_scene_specs.model_dump(), f, indent=3)
 
     # 3. Generate scene params
     obj_placement_specs = generate_scene_params(
@@ -164,15 +169,17 @@ def run(
     for render_id, render_path, masks in get_completed_renders(run_uid):
         # 5.1. Add background
         bg_added_successfully = False
-        for _ in range(MaxRetries.ADD_BACKGROUND):
+        for try_number in range(1, MaxRetries.ADD_BACKGROUND + 1):
             try:
                 img_with_bg_path = add_background(
                     render_id=render_id,
                     run_uid=run_uid,
                     render_path=render_path,
                     action_scene=action_scene,
+                    try_number=try_number,
                 )
-            except HTTPError as e:
+            # Sometimes images trigger false positive of content violation policies
+            except (HTTPError, FalClientHTTPError) as e:
                 warnings.warn(f"HTTP error: {e}")
                 break
 
@@ -191,26 +198,40 @@ def run(
 
         # 5.2. Modify poses
         cur_img_path = img_with_bg_path
-        for object_name, pose_specs in action_scene_specs.pose.items():
-            if not is_object_animate(object_name, vlm):
-                continue  # Don't try to modify poses of inanimate objects (too hard for models)
-
+        for object_name, pose_specs in action_scene_specs.state.items():
             pose_was_successfully_modified = False
-            for _ in range(MaxRetries.MODIFY_POSE):
+            # Combine state and orientation specs to get "pose" specs
+            pose_specs = pose_specs + action_scene_specs.orientation[object_name]
+            obj_is_animate = is_object_animate(object_name, vlm)
+            for try_number in range(1, MaxRetries.MODIFY_STATE + 1):
                 try:
-                    modified_pose_path = modify_pose(
+                    modified_pose_img_path = modify_pose(
                         render_id=render_id,
                         run_uid=run_uid,
                         start_img_path=cur_img_path,
                         object_name=object_name,
                         pose_specs=pose_specs,
                         masks=masks,
+                        try_number=try_number,
                     )
-                    if objects_are_preserved(modified_pose_path, action_scene, vlm):
+                    if objects_are_preserved(modified_pose_img_path, action_scene, vlm):
                         pose_was_successfully_modified = True
-                        cur_img_path = modified_pose_path
+                        if not obj_is_animate and not pose_edit_is_improvement(
+                            pre_edit_path=cur_img_path,
+                            post_edit_path=modified_pose_img_path,
+                            object_name=object_name,
+                            pose_specs=pose_specs,
+                            vlm=vlm,
+                        ):
+                            print(
+                                f"Pose edit for inanimate object '{object_name}' "
+                                f"deemed worse than original — keeping pre-edit image."
+                            )
+                        else:
+                            cur_img_path = modified_pose_img_path
                         break
-                except HTTPError as e:
+                # Sometimes images trigger false positive of content violation policies
+                except (HTTPError, FalClientHTTPError) as e:
                     warnings.warn(f"HTTP error: {e}")
                     break
             if not pose_was_successfully_modified:
@@ -219,7 +240,7 @@ def run(
         if not pose_was_successfully_modified:
             warnings.warn(
                 f"Failed to modify pose for object {object_name} after "
-                f"{MaxRetries.MODIFY_POSE} retries. Skipping this render."
+                f"{MaxRetries.MODIFY_STATE} retries. Skipping this render."
             )
             edits_were_successful[render_id] = False
             print(f"FAILED: edits aborted for render {render_id}.")

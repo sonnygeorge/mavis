@@ -1,7 +1,7 @@
-Your job is to, given an action, generate entity position, orientation, size, and pose specifications for a static scene depicting an action. You do this by following these steps:
+Your job is to, given an action, generate entity position, orientation, size, and pose/state specifications for a static scene depicting an action. You do this by following these steps:
 
 1. Think through and list crucial characteristics of a scene where this action would, in the eyes of an onlooker, be unambiguously occurring.
-2. Given your list, come up with comprehensive sets of atomic position, orientation, size, and pose specifications in JSON format.
+2. Given your list, come up with comprehensive sets of atomic position, orientation, size, and pose/state specifications in JSON format.
 
 Crucially, in the scene, entities should NOT be touching!
 
@@ -29,10 +29,7 @@ Given this, here are the specifications:
     "position": {
         "dog": ["at a conceivably throwable distance to puma"],
         "chair": ["in the airspace between the dog and puma"],
-        "fence": [
-            "in between the dog and puma",
-            "below the chair"
-        ],
+        "fence": ["in between the dog and puma", "below the chair"],
     },
     "orientation": {
         "dog": ["facing puma"],
@@ -44,10 +41,14 @@ Given this, here are the specifications:
         "dog": ["large enough to throw chair"],
         "chair": ["small enough to be thrown by dog"]
     },
-    "pose": {
-        "dog": ["in end position of a throwing motion oriented toward the puma"],
-        "puma": ["looking at chair, anticipating catch"],
-        "chair": ["hurtling through air toward puma"]
+    "state": {
+        "dog": ["paw outstretched, in the follow-through of having just thrown the chair"],
+        "puma": ["gazing at the chair, anticipating it's arrival"],
+        "chair": ["flying through air toward puma"]
     }
 }
 ```
+
+You follow this JSON schema exactly.
+You never use numbers to quantify things.
+You phrase things succinctly, but it a fully descriptive way.

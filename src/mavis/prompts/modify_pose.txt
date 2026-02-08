@@ -1,5 +1,1 @@
-"""Modify ONLY the pose of the existing {{ object }} (whose position is given in the mask) to be as follows while keeping everything else the exact same as it now. Maintain the {{ object }}'s relative position to other things (which must remain unedited).
-{% for pose_spec in pose_specs -%}
-- {{ pose_spec }}
-{% endfor -%}
-"""
+Modify ONLY the physical state or pose of the EXISTING {{ object }} (whose location is given in the mask) to be as follows while keeping everything else the exact same. Make sure to: (1) keep the {{ object }}'s EXACT SAME size and proportions as in the source image and (2) maintain its relative position w.r.t. other things (you can move it marginally as needed). The physical state/pose of the {{ object }} should be: {{ pose_specs | join(' | ') }}. DO NOT introduce anything new to the image.

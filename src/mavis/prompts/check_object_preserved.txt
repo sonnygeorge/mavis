@@ -1,0 +1,1 @@
+This scene is expected to contain one of each: {{ all_objects_str }}. Focusing on the {{ object }}: is there exactly one {{ object }} in the scene that is clearly recognizable and well-formed (not distorted, mangled, or incomplete)? (Yes/No)

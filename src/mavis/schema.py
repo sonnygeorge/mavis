@@ -84,16 +84,22 @@ class ActionScene(BaseModel):
         to whom: puma
         ```
         """
+
+        def get_article(name: str) -> str:
+            return "an" if name[0] in "aeiou" else "a"
+
         lines = [
-            f"who: {self.who.name}",
+            f"who: {get_article(self.who.name)} {self.who.name}",
             f"does: {self.does}",
         ]
         if self.what is not None:
-            lines.append(f"what: {self.what.name}")
-        if self.where is not None:
-            lines.append(f"where: {self.where.preposition} {self.where.what.name}")
+            lines.append(f"what: {get_article(self.what.name)} {self.what.name}")
         if self.to_whom is not None:
-            lines.append(f"to whom: {self.to_whom.name}")
+            lines.append(f"to whom: {get_article(self.to_whom.name)} {self.to_whom.name}")
+        if self.where is not None:
+            lines.append(
+                f"where: {self.where.preposition} {get_article(self.where.what.name)} {self.where.what.name}"
+            )
         return "\n".join(lines)
 
     @property
@@ -127,7 +133,7 @@ class ActionSceneSpecs(BaseModel):
     position: dict[str, list[str]]
     orientation: dict[str, list[str]]
     size: dict[str, list[str]]
-    pose: dict[str, list[str]]
+    state: dict[str, list[str]]
 
     def as_readable_string(self) -> str:
         return json.dumps(self.model_dump(), indent=2)
@@ -140,6 +146,17 @@ class YesNo(StrEnum):
 
 class BinaryResponse(BaseModel):
     answer: YesNo
+    confidence: float  # 0.0 (no confidence) to 1.0 (full confidence)
+
+
+class ImageChoice(StrEnum):
+    first = "First"
+    second = "Second"
+
+
+class ImageComparisonResponse(BaseModel):
+    answer: ImageChoice
+    confidence: float  # 0.0 (no confidence) to 1.0 (full confidence)
 
 
 class VLMPrompt(BaseModel):
